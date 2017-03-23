@@ -2,6 +2,7 @@
 
 const path = require('path');
 const ZwaveDriver = require('homey-zwavedriver');
+const endpointInterval = {};
 
 // http://www.pepper1.net/zwavedb/device/280
 
@@ -19,6 +20,7 @@ module.exports = new ZwaveDriver(path.basename(__dirname), {
 			command_report_parser: report => report.Value === 'on/enable',
 			pollInterval: 'poll_interval_onoff',
 		},
+
 		measure_power: {
 			command_class: 'COMMAND_CLASS_METER',
 			command_get: 'METER_GET',
@@ -37,7 +39,7 @@ module.exports = new ZwaveDriver(path.basename(__dirname), {
 				}
 				return null;
 			},
-			pollInterval: 'poll_interval_meter',
+			pollInterval: 'poll_interval_measure',
 		},
 
 		meter_power: {
@@ -58,9 +60,32 @@ module.exports = new ZwaveDriver(path.basename(__dirname), {
 				}
 				return null;
 			},
-			pollInterval: 'poll_interval_measure',
+			pollInterval: 'poll_interval_meter',
 		},
 	},
+
+	beforeInit: (token, callback) => {
+		const node = module.exports.nodes[token];
+		if (node) {
+			module.exports.getSettings(node.device_data, (err, settings) => {
+				if (err) return console.error('error retrieving settings for device', err);
+
+				if (settings.zw_node_id.indexOf('.') < 0 && !endpointInterval.hasOwnProperty(token)) {
+					endpointInterval[token] = {};
+					for (var i = 1; i <= 6; i++) {
+						endpointInterval[token][i] = [];
+						if (settings['endpoint_Interval_onoff_' + i]) setEndpointInterval('onoff', i, settings['endpoint_Interval_onoff_' + i], token);
+						if (settings['endpoint_Interval_measure_' + i]) setEndpointInterval('measure', i, settings['endpoint_Interval_measure_' + i], token);
+						if (settings['endpoint_Interval_meter_' + i]) setEndpointInterval('meter', i, settings['endpoint_Interval_meter_' + i], token);
+					}
+				}
+			});
+		}
+
+		// Initiate the device
+		return callback();
+	},
+
 	settings: {
 		0: {
 			index: 0,
@@ -71,6 +96,24 @@ module.exports = new ZwaveDriver(path.basename(__dirname), {
 			size: 1,
 			signed: false,
 		},
+		endpoint_Interval_onoff_1: (newValue, oldValue, deviceData) => setEndpointInterval('onoff', 1, newValue, deviceData.token),
+		endpoint_Interval_measure_1: (newValue, oldValue, deviceData) => setEndpointInterval('measure', 1, newValue, deviceData.token),
+		endpoint_Interval_meter_1: (newValue, oldValue, deviceData) => setEndpointInterval('meter', 1, newValue, deviceData.token),
+		endpoint_Interval_onoff_2: (newValue, oldValue, deviceData) => setEndpointInterval('onoff', 2, newValue, deviceData.token),
+		endpoint_Interval_measure_2: (newValue, oldValue, deviceData) => setEndpointInterval('measure', 2, newValue, deviceData.token),
+		endpoint_Interval_meter_2: (newValue, oldValue, deviceData) => setEndpointInterval('meter', 1, newValue, deviceData.token),
+		endpoint_Interval_onoff_3: (newValue, oldValue, deviceData) => setEndpointInterval('onoff', 3, newValue, deviceData.token),
+		endpoint_Interval_measure_3: (newValue, oldValue, deviceData) => setEndpointInterval('measure', 3, newValue, deviceData.token),
+		endpoint_Interval_meter_3: (newValue, oldValue, deviceData) => setEndpointInterval('meter', 3, newValue, deviceData.token),
+		endpoint_Interval_onoff_4: (newValue, oldValue, deviceData) => setEndpointInterval('onoff', 4, newValue, deviceData.token),
+		endpoint_Interval_measure_4: (newValue, oldValue, deviceData) => setEndpointInterval('measure', 4, newValue, deviceData.token),
+		endpoint_Interval_meter_4: (newValue, oldValue, deviceData) => setEndpointInterval('meter', 4, newValue, deviceData.token),
+		endpoint_Interval_onoff_5: (newValue, oldValue, deviceData) => setEndpointInterval('onoff', 5, newValue, deviceData.token),
+		endpoint_Interval_measure_5: (newValue, oldValue, deviceData) => setEndpointInterval('measure', 5, newValue, deviceData.token),
+		endpoint_Interval_meter_5: (newValue, oldValue, deviceData) => setEndpointInterval('meter', 5, newValue, deviceData.token),
+		endpoint_Interval_onoff_6: (newValue, oldValue, deviceData) => setEndpointInterval('onoff', 6, newValue, deviceData.token),
+		endpoint_Interval_measure_6: (newValue, oldValue, deviceData) => setEndpointInterval('measure', 6, newValue, deviceData.token),
+		endpoint_Interval_meter_6: (newValue, oldValue, deviceData) => setEndpointInterval('meter', 6, newValue, deviceData.token),
 	},
 });
 
@@ -87,3 +130,57 @@ Homey.manager('flow').on('action.PN6_reset_meter', (callback, args) => {
 		});
 	} else return callback('unknown_error');
 });
+
+function setEndpointInterval(capability, multiChannel, value, token) {
+	const node = module.exports.nodes[token];
+
+	if (endpointInterval[token][multiChannel][capability]) {
+		clearInterval(endpointInterval[token][multiChannel][capability]);
+		endpointInterval[token][multiChannel][capability] = null
+	}
+
+	if (value === 0) return;
+
+	switch (capability) {
+		case 'onoff':
+			{
+				if (typeof node.instance.MultiChannelNodes[multiChannel].CommandClass.COMMAND_CLASS_SWITCH_BINARY !== "undefined") {
+					endpointInterval[token][multiChannel].onoff = setInterval(() => {
+						module.exports._debug('polling: [' + multiChannel + '].' + capability);
+						node.instance.MultiChannelNodes[multiChannel].CommandClass.COMMAND_CLASS_SWITCH_BINARY.SWITCH_BINARY_GET({});
+					}, value * 1000);
+				}
+			}
+			break;
+
+		case 'measure':
+			{
+				if (typeof node.instance.MultiChannelNodes[multiChannel].CommandClass.COMMAND_CLASS_METER !== "undefined") {
+					endpointInterval[token][multiChannel].measure = setInterval(() => {
+						module.exports._debug('polling: [' + multiChannel + '].' + capability);
+						node.instance.MultiChannelNodes[multiChannel].CommandClass.COMMAND_CLASS_METER.METER_GET({
+							Properties1: {
+								Scale: 2,
+							},
+						});
+					}, value * 1000);
+				}
+			}
+			break;
+
+		case 'meter':
+			{
+				if (typeof node.instance.MultiChannelNodes[multiChannel].CommandClass.COMMAND_CLASS_METER !== "undefined") {
+					endpointInterval[token][multiChannel].meter = setInterval(() => {
+						module.exports._debug('polling: [' + multiChannel + '].' + capability);
+						node.instance.MultiChannelNodes[multiChannel].CommandClass.COMMAND_CLASS_METER.METER_GET({
+							Properties1: {
+								Scale: 0,
+							},
+						});
+					}, value * 1000);
+				}
+			}
+			break;
+	}
+}
