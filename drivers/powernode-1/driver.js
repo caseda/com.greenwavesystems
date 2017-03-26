@@ -10,6 +10,7 @@ module.exports = new ZwaveDriver(path.basename(__dirname), {
 		onoff: {
 			command_class: 'COMMAND_CLASS_SWITCH_BINARY',
 			command_get: 'SWITCH_BINARY_GET',
+			command_get_cb: false,
 			command_set: 'SWITCH_BINARY_SET',
 			command_set_parser: value => ({
 				'Switch Value': value,
